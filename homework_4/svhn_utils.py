@@ -8,14 +8,18 @@ import numpy as np
 
 mnist_transform = transforms.Compose([
                 transforms.ToTensor(),
-                transforms.Normalize((0.1307,), (0.3081,)),
+                transforms.Normalize( ([0.4376821, 0.4437697, 0.47280442]), ([0.19803012, 0.20101562, 0.19703614])),
            ])
 
-def fashion_mnist(batch_size=50, valid=0, shuffle=True, transform=mnist_transform, path='./FashionMNIST_data'):
-    test_data = datasets.FashionMNIST(path, train=False, download=True, transform=transform)
+def svhn(batch_size=50, valid=0, shuffle=True, transform=mnist_transform, path='./SVHN_data'):
+    test_data = datasets.SVHN(path, split='test', download=True, transform=transform)
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
-    
-    train_data = datasets.FashionMNIST(path, train=True, download=True, transform=transform)
+
+    train_data = datasets.SVHN(path, split='train', download=True, transform=transform)
+
+    print ('train shape: ', train_data.data.shape)
+    print ('test shape: ', test_data.data.shape)
+
     if valid > 0:
         num_train = len(train_data)
         indices = list(range(num_train))
@@ -35,13 +39,13 @@ def fashion_mnist(batch_size=50, valid=0, shuffle=True, transform=mnist_transfor
         return train_loader, test_loader
 
 
-def fashion_mnist_plotdata(transform=mnist_transform, path='./FashionMNIST_data'):
-    train_data = datasets.FashionMNIST(path, train=True, download=True, transform=transform)
+def svhn_plotdata(transform=mnist_transform, path='./SVHN_data'):
+    train_data = datasets.SVHN(path, split='train', download=True, transform=transform)
     images = [train_data[i][0] for i in range(50)]
     return images
 
 
-def plot_fashion_mnist(images, shape):
+def plot_svhn(images, shape):
     fig = plt.figure(figsize=shape[::-1], dpi=80)
     for j in range(1, len(images) + 1):
         ax = fig.add_subplot(shape[0], shape[1], j)
