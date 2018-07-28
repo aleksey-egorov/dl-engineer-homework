@@ -18,7 +18,7 @@ class Alphabet(object):
     def __len__(self):
         return self._len
 
-    
+
 class Texts(object):
     def __init__(self, path):
         self.dictionary = Alphabet()
@@ -27,7 +27,7 @@ class Texts(object):
         self.test = self.tokenize(os.path.join(path, 'test.txt'))
 
     def tokenize(self, path):
-        """Tokenizes a text file."""
+      
         assert os.path.exists(path)
         # Add symbol to the dictionary
         with open(path, 'r') as f:
@@ -77,8 +77,12 @@ class TextLoader(object):
     
     def __len__(self):
         return self.batch_data.size(0)
-    
-    
+
+
+
+
+
+
 class TextDataset(torch.utils.data.Dataset):
     
     raw_folder = 'raw'    
@@ -86,23 +90,22 @@ class TextDataset(torch.utils.data.Dataset):
     valid_file = 'valid.txt'
     test_file = 'test.txt'
     
-    def __init__(self, root, train=True, sequence_length=32):
+    def __init__(self, root, dataset_type='train', alphabet=Alphabet()):
         self.root = os.path.expanduser(root)
-        self.sequence_length = sequence_length
-        self.train = train  # training set or test set
-        self.dictionary = Alphabet()
-
+        self.type = dataset_type  # training set, valid set or test set
+        self.dictionary = alphabet
         if not self._check_exists():
             raise RuntimeError('Dataset not found.')
 
-        if self.train:
-            self.train_data = self.tokenize(os.path.join(self.root, self.training_file))
-            self.valid_data = self.tokenize(os.path.join(self.root, self.valid_file))
-        else:
-            self.test_data = self.tokenize(os.path.join(self.root, self.test_file))
+        self.type_map = {
+            'train': self.training_file,
+            'valid': self.valid_file,
+            'test': self.test_file
+        }
+        self.data = self.tokenize(os.path.join(self.root, self.type_map[self.type]))
 
     def tokenize(self, path):
-        """Tokenizes a text file."""
+
         assert os.path.exists(path)
         # Add symbol to the dictionary
         with open(path, 'r') as f:
@@ -124,64 +127,89 @@ class TextDataset(torch.utils.data.Dataset):
         return ids
 
     def __len__(self):
-        if self.train:
-            return len(str(self.train_data))
-        else:
-            return len(str(self.test_data))
+        return len(str(self.data))
 
-    def get_seq(self, dataset):
-        for i in range(0, dataset.size(0) - 1, self.sequence_length):
-            seq_len = min(self.sequence_length, len(dataset) - 1 - i)
-            data = dataset[i:i + seq_len]
-            target = dataset[i + 1:i + 1 + seq_len].view(-1)
-            yield data, target
+    def getData(self):
+        return self.data
 
     def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-
-        Returns:
-            tuple: (image, target) where target is index of the target class.
-        """
-        texts = []
-        targets = []
-        for batch, (data_seq, target_seq) in enumerate(self.get_seq(self.train_data)):
-            texts.append(data_seq)
-            targets.append(target_seq)
-
-
-        #if self.train:
-        #    text, target = self.train_data[index], self.train_data[index]
-        #else:
-        #    text, target = self.test_data[index], self.test_data[index]
-
-        return texts, targets
+       pass
 
     def _check_exists(self):
         return os.path.exists(os.path.join(self.root, self.training_file)) and \
             os.path.exists(os.path.join(self.root, self.test_file))
 
 
+class TextDataLoader(torch.utils.data.DataLoader):
 
-def text_dataloader(path='./text', batch_size=128, valid=0):
-    test_data = TextDataset(path, train=False)
-    test_loader = DataLoader(test_data, batch_size=batch_size)
+    __initialized = False
 
-    train_data = TextDataset(path, train=True)
-    if valid > 0:
-        num_train = len(train_data)
-        indices = list(range(num_train))
-        split = num_train - valid
+    def __init__(self, dataset, batch_size=128, sequence_length=32, sampler=None, batch_sampler=None,
+                 num_workers=0, drop_last=False, collate_fn=torch.utils.data.dataloader.default_collate, pin_memory=False,
+                 timeout=0, worker_init_fn=None):
+        self.dataset = dataset
+        self.data = dataset.getData()
+        self.batch_size = batch_size
+        self.collate_fn = collate_fn
+        self.pin_memory = pin_memory
+        self.sequence_length = sequence_length
+        self.num_workers = num_workers
+        self.drop_last = drop_last
+        self.timeout = timeout
+        self.worker_init_fn = worker_init_fn
+        self._batchify()
 
-        train_idx, valid_idx = indices[:split], indices[split:]
-        train_sampler = SubsetRandomSampler(train_idx)
-        valid_sampler = SubsetRandomSampler(valid_idx)
+        if timeout < 0:
+            raise ValueError('timeout option should be non-negative')
 
-        train_loader = DataLoader(train_data, batch_size=batch_size, sampler=train_sampler)
-        valid_loader = DataLoader(train_data, batch_size=batch_size, sampler=valid_sampler)
+        if batch_sampler is not None:
+            if batch_size > 1  or sampler is not None or drop_last:
+                raise ValueError('batch_sampler option is mutually exclusive '
+                                 'with batch_size, shuffle, sampler, and '
+                                 'drop_last')
+            self.batch_size = None
+            self.drop_last = None
 
+        if self.num_workers < 0:
+            raise ValueError('num_workers option cannot be negative; '
+                             'use num_workers=0 to disable multiprocessing.')
+
+        self.__initialized = True
+
+    def _batchify(self):
+        # Work out how cleanly we can divide the dataset into batch_size parts.
+        self.nbatch = self.data.size(0) // self.batch_size
+        # Trim off any extra elements that wouldn't cleanly fit (remainders).
+        data = self.data.narrow(0, 0, self.nbatch * self.batch_size)
+        # Evenly divide the data across the batch_size batches.
+        self.batch_data = data.view(self.batch_size, -1).t().contiguous()
+
+    def _get_batch(self, i):
+        seq_len = min(self.sequence_length, len(self.batch_data) - 1 - i)
+        data = self.batch_data[i:i + seq_len]
+        target = self.batch_data[i + 1:i + 1 + seq_len].view(-1)
+        return data, target
+
+    def __iter__(self):
+        for i in range(0, self.batch_data.size(0) - 1, self.sequence_length):
+            data, targets = self._get_batch(i)
+           # targets = targets.view_as(data)
+            yield data, targets
+
+    def __len__(self):
+        return len(self.batch_data)
+
+
+def text_dataloader(path='./text', batch_size=128, sequence_length=32, valid=True, alphabet=Alphabet()):
+    test_dataset = TextDataset(path, dataset_type='test', alphabet=alphabet)
+    test_loader = TextDataLoader(test_dataset, batch_size=batch_size, sequence_length=sequence_length)
+
+    train_dataset = TextDataset(path, dataset_type='train', alphabet=alphabet)
+    if valid:
+        valid_dataset = TextDataset(path, dataset_type='valid', alphabet=alphabet)
+        train_loader = TextDataLoader(train_dataset, batch_size=batch_size, sequence_length=sequence_length)
+        valid_loader = TextDataLoader(valid_dataset, batch_size=batch_size, sequence_length=sequence_length)
         return train_loader, valid_loader, test_loader
     else:
-        train_loader = DataLoader(train_data, batch_size=batch_size)
+        train_loader = TextDataLoader(train_dataset, batch_size=batch_size, sequence_length=sequence_length)
         return train_loader, test_loader
