@@ -16,5 +16,5 @@
 
 3. classifier_conv_generate_images_rmsprop_try1.ipynb - генерация изображений на входе сверточного классификатора
 
-   classifier_conv_generate_images_rmsprop_try2.ipynb
+   classifier_conv_generate_images_rmsprop_try2.ipynb - генерация изображений на входе сверточного классификатора
 
