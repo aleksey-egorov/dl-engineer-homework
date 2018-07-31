@@ -14,5 +14,6 @@
 2. classifier_generate_images.ipynb - генерация изображений на входе MLP-классификатора
 
 3. classifier_conv_generate_images_rmsprop_try1.ipynb - генерация изображений на входе сверточного классификатора
+
    classifier_conv_generate_images_rmsprop_try2.ipynb
 
