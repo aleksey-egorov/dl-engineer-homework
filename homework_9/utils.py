@@ -81,3 +81,24 @@ def to_onehot(x, n, device=None):
     if device is not None:
         one_hot = one_hot.to(device)
     return one_hot
+
+
+
+
+
+class CustomDataset(torch.utils.data.Dataset):
+    def __init__(self, path=''): 
+        rdata = torch.load(path)      
+        self.data = rdata[0]
+        self.labels = rdata[1]
+        self.sampler = self.data
+    
+    def __len__(self):
+        return len(str(self.data))
+
+    def getData(self):
+        return self.data
+   
+    def __getitem__(self, index):        
+        data, labels  = self.data[index], self.labels[index]        
+        return data, labels
